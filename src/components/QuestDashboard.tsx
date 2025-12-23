@@ -1,9 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { useAuth } from '@/context/AuthContext'
 import EngagementCard from './EngagementCard'
-import ProtectedRoute from './ProtectedRoute'
 import { motion } from 'framer-motion'
 import {
     Zap, Globe, CloudSun, UserCheck, Clock,
@@ -24,7 +22,7 @@ const INTERACTIONS = [
     { id: '10', name: 'Open Capsule', desc: 'Reveal long-term rewards.', icon: Gift, points: 1000 },
 ]
 
-function QuestContent() {
+export default function QuestDashboard() {
     const [completed, setCompleted] = useState<string[]>([])
     const [timestamps, setTimestamps] = useState<Record<string, number>>({})
     const [comboActive, setComboActive] = useState(false)
@@ -67,11 +65,11 @@ function QuestContent() {
     const progress = (completed.length / INTERACTIONS.length) * 100
 
     return (
-        <div className="max-w-6xl mx-auto w-full">
+        <div className="w-full">
             {/* Header Stats */}
             <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold text-gray-900 mb-2">Daily Quests</h1>
+                    <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Daily Quests</h2>
                     <p className="text-gray-500">Complete rituals to boost your global score.</p>
                 </div>
                 <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
@@ -136,13 +134,5 @@ function QuestContent() {
                 ))}
             </motion.div>
         </div>
-    )
-}
-
-export default function QuestDashboard() {
-    return (
-        <ProtectedRoute>
-            <QuestContent />
-        </ProtectedRoute>
     )
 }
