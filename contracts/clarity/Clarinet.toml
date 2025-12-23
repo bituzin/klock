@@ -1,0 +1,16 @@
+[project]
+name = "pulse-clarity"
+description = "PULSE Daily Ritual dApp - Clarity Smart Contract"
+authors = ["PULSE Team"]
+telemetry = false
+cache_dir = ".cache"
+
+[contracts.pulse]
+path = "pulse.clar"
+clarity_version = 4
+epoch = "3.3"
+
+# Deployment configuration for Stacks Testnet
+[repl.analysis]
+passes = ["check_checker"]
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
