@@ -1,4 +1,5 @@
 import ConnectButton from '@/components/ConnectButton'
+import HeroActions from '@/components/HeroActions'
 import QuestDashboard from '@/components/QuestDashboard'
 import { Zap, Globe, Users, TrendingUp, Shield, Sparkles } from 'lucide-react'
 
@@ -42,7 +43,7 @@ export default function Home() {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start">
-                <ConnectButton />
+                <HeroActions />
                 <button className="px-6 py-3 bg-white border-2 border-gray-200 rounded-full font-semibold text-gray-900 hover:border-[#FF6B00] hover:text-[#FF6B00] transition-all duration-200 shadow-sm">
                   Learn More ↓
                 </button>
@@ -257,7 +258,7 @@ export default function Home() {
       </section>
 
       {/* Quest Dashboard Section */}
-      <section className="py-12 md:py-20 px-4 md:px-8">
+      <section id="dashboard" className="py-12 md:py-20 px-4 md:px-8">
         <div className="flex flex-col items-center">
           <QuestDashboard />
         </div>
