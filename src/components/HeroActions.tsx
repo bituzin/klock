@@ -1,11 +1,11 @@
 'use client'
 
-import { useAccount } from 'wagmi'
+import { useAuth } from '@/context/AuthContext'
 import ConnectButton from './ConnectButton'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, LogIn } from 'lucide-react'
 
 export default function HeroActions() {
-    const { isConnected } = useAccount()
+    const { isConnected, isLoggedIn, login } = useAuth()
 
     const scrollToDashboard = () => {
         const dashboard = document.getElementById('dashboard')
@@ -14,11 +14,12 @@ export default function HeroActions() {
         }
     }
 
-    if (isConnected) {
+    // State 3: Logged in - show Enter App button
+    if (isLoggedIn) {
         return (
             <button
                 onClick={scrollToDashboard}
-                className="flex items-center gap-2 px-6 py-3 bg-[#FF6B00] text-white rounded-full font-semibold hover:bg-[#FF8533] transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#FF6B00] to-[#FF8533] text-white rounded-full font-semibold hover:shadow-xl transition-all duration-200 shadow-lg transform hover:-translate-y-0.5"
             >
                 Enter App
                 <ArrowRight size={20} />
@@ -26,5 +27,19 @@ export default function HeroActions() {
         )
     }
 
+    // State 2: Connected but not logged in - show Login to App button
+    if (isConnected) {
+        return (
+            <button
+                onClick={login}
+                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#FF6B00] to-[#FF8533] text-white rounded-full font-semibold hover:shadow-xl transition-all duration-200 shadow-lg transform hover:-translate-y-0.5"
+            >
+                <LogIn size={20} />
+                Login to App
+            </button>
+        )
+    }
+
+    // State 1: Not connected - show Connect Wallet button
     return <ConnectButton />
 }
