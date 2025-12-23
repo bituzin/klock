@@ -3,6 +3,7 @@
 import { wagmiAdapter, projectId } from '@/config'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createAppKit } from '@reown/appkit/react'
+import { BitcoinAdapter } from '@reown/appkit-adapter-bitcoin'
 import {
     mainnet,
     arbitrum,
@@ -13,7 +14,9 @@ import {
     avalanche,
     bsc,
     celo,
-    baseSepolia
+    baseSepolia,
+    bitcoin,
+    bitcoinTestnet
 } from '@reown/appkit/networks'
 import React, { type ReactNode } from 'react'
 import { cookieToInitialState, WagmiProvider, type Config } from 'wagmi'
@@ -34,17 +37,28 @@ const metadata = {
     icons: ['https://avatars.githubusercontent.com/u/179229932']
 }
 
-// Create the modal - EVM chains only (no Bitcoin adapter to prevent Leather auto-trigger)
+// Set up Bitcoin Adapter (for Leather, Xverse, etc.)
+const bitcoinAdapter = new BitcoinAdapter({
+    projectId
+})
+
+// Create the modal with both EVM and Bitcoin support
 const modal = createAppKit({
-    adapters: [wagmiAdapter],
+    adapters: [wagmiAdapter, bitcoinAdapter],
     projectId,
-    networks: [mainnet, polygon, optimism, arbitrum, base, bsc, avalanche, celo, sepolia, baseSepolia],
+    networks: [
+        // EVM Networks
+        mainnet, polygon, optimism, arbitrum, base, bsc, avalanche, celo, sepolia, baseSepolia,
+        // Bitcoin Networks
+        bitcoin, bitcoinTestnet
+    ],
     defaultNetwork: base,
     metadata: metadata,
     features: {
         analytics: true,
+        // Disable email and social login to prevent auto-connect behaviors
         email: false,
-        socials: false,
+        socials: []
     },
     themeMode: 'light',
     themeVariables: {
@@ -68,4 +82,3 @@ function ContextProvider({ children, cookies }: { children: ReactNode; cookies: 
 }
 
 export default ContextProvider
-
