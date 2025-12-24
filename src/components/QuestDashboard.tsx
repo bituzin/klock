@@ -45,6 +45,9 @@ export default function QuestDashboard() {
         isQuestCompleted,
         checkComboAvailable,
         refreshData,
+        needsStacksConnect,
+        stacksAddress,
+        connectStacksForSigning,
     } = useUnifiedContract()
 
     const [pendingQuest, setPendingQuest] = useState<number | null>(null)
@@ -181,7 +184,7 @@ export default function QuestDashboard() {
                         <div>
                             <span className="text-sm font-medium text-gray-700">
                                 {activeContract === 'base' && 'Connected to Base'}
-                                {activeContract === 'stacks' && 'Connected to Stacks'}
+                                {activeContract === 'stacks' && `Connected to Stacks (${stacksAddress?.slice(0, 8)}...)`}
                                 {activeContract === 'none' && 'Unsupported Network'}
                             </span>
                             {contractInfo.contractAddress && (
@@ -201,6 +204,30 @@ export default function QuestDashboard() {
                         {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Refresh'}
                     </button>
                 </div>
+            )}
+
+            {/* Stacks Connect Prompt - shown when connected via AppKit but need @stacks/connect for signing */}
+            {needsStacksConnect && (
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6 bg-purple-50 border border-purple-200 rounded-xl p-4"
+                >
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="font-medium text-purple-900">Enable Stacks Transactions</h3>
+                            <p className="text-sm text-purple-700">
+                                Connect your Stacks wallet to sign transactions and complete quests.
+                            </p>
+                        </div>
+                        <button
+                            onClick={connectStacksForSigning}
+                            className="px-4 py-2 bg-purple-600 text-white font-medium rounded-xl hover:bg-purple-700 transition-colors"
+                        >
+                            Connect Stacks Wallet
+                        </button>
+                    </div>
+                </motion.div>
             )}
 
             {/* User Stats */}
@@ -375,7 +402,7 @@ export default function QuestDashboard() {
                         streakRisk={quest.risk}
                         isCompleted={isQuestCompleted(quest.id)}
                         isLoading={pendingQuest === quest.id}
-                        isDisabled={quest.disabled || !isConnected || activeContract === 'none'}
+                        isDisabled={quest.disabled || !isConnected}
                         onClick={() => handleInteraction(quest.id, quest.action)}
                     />
                 ))}
