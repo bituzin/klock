@@ -16,7 +16,7 @@ import {
     celo,
     baseSepolia,
     bitcoin,
-    bitcoinTestnet
+    bitcoinTestnet,
 } from '@reown/appkit/networks'
 import React, { type ReactNode } from 'react'
 import { cookieToInitialState, WagmiProvider, type Config } from 'wagmi'
@@ -32,33 +32,38 @@ if (!projectId) {
 // Set up metadata
 const metadata = {
     name: 'PULSE - Social Ritual dApp',
-    description: 'A daily social ritual engagement dApp on Base and multi-chain',
+    description: 'A daily social ritual engagement dApp on Base and Stacks',
     url: typeof window !== 'undefined' ? window.location.origin : 'https://klock-jade.vercel.app',
     icons: ['https://avatars.githubusercontent.com/u/179229932']
 }
 
-// Set up Bitcoin Adapter (for Leather, Xverse, etc.)
+// Set up Bitcoin Adapter
+// Note: For Stacks transactions, we use @stacks/connect directly
+// The BitcoinAdapter enables connection with wallets like Leather/Xverse
 const bitcoinAdapter = new BitcoinAdapter({
     projectId
 })
 
-// Create the modal with both EVM and Bitcoin support
+// Create the modal with EVM and Bitcoin support
+// Stacks transactions are handled separately via @stacks/connect
 const modal = createAppKit({
     adapters: [wagmiAdapter, bitcoinAdapter],
     projectId,
     networks: [
-        // EVM Networks
-        mainnet, polygon, optimism, arbitrum, base, bsc, avalanche, celo, sepolia, baseSepolia,
-        // Bitcoin Networks
+        // Primary EVM Networks
+        base,
+        baseSepolia,
+        // Additional EVM Networks
+        mainnet, polygon, optimism, arbitrum, bsc, avalanche, celo, sepolia,
+        // Bitcoin Networks (wallets like Leather also support Stacks)
         bitcoin, bitcoinTestnet
     ],
     defaultNetwork: base,
     metadata: metadata,
-    // CRITICAL: Disable auto-reconnect to prevent Leather wallet from auto-triggering on page load
+    // Disable auto-reconnect to prevent wallet auto-triggering
     enableReconnect: false,
     features: {
         analytics: true,
-        // Disable email and social login to prevent auto-connect behaviors
         email: false,
         socials: []
     },
