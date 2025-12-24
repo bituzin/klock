@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useEffect } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useAppKitAccount } from '@reown/appkit/react'
 import { usePulseContract } from './usePulseContract'
 import { useStacks } from '@/context/StacksContext'
@@ -48,7 +48,7 @@ function isStacksMainnet(address: string | undefined): boolean {
  * based on the connected wallet's network
  * 
  * For Base (EVM): Uses AppKit + wagmi hooks
- * For Stacks: Detects SP/ST address from AppKit and uses StacksContext for transactions
+ * For Stacks: Detects SP/ST address from AppKit and executes via @stacks/connect
  */
 export function useUnifiedContract() {
     const { isConnected: isAppKitConnected, address: appKitAddress } = useAppKitAccount()
@@ -151,73 +151,50 @@ export function useUnifiedContract() {
     // Unified error state
     const error = baseContract.error || stacksContract.error
 
-    // For Stacks transactions when connected via AppKit (not @stacks/connect),
-    // we need to prompt the user to also connect via @stacks/connect for transactions
-    const needsStacksConnect = isStacksFromAppKit && !stacksContract.isConnected
-
     // Unified quest execution - routes to correct contract
+    // For Stacks: Always use StacksContext functions which will show wallet picker for signing
     const dailyCheckin = useCallback(async () => {
         if (activeContract === 'base') return baseContract.dailyCheckin()
         if (activeContract === 'stacks') {
-            // If connected via @stacks/connect, use that
-            if (stacksContract.isConnected) return stacksContract.dailyCheckin()
-            // Otherwise, prompt to connect Stacks wallet for signing
-            return { success: false, error: 'Please connect your Stacks wallet to sign transactions' }
+            // Use StacksContext for transaction - it will show wallet picker for signing
+            return stacksContract.dailyCheckin()
         }
         return { success: false, error: 'No supported network connected' }
     }, [activeContract, baseContract, stacksContract])
 
     const relaySignal = useCallback(async () => {
         if (activeContract === 'base') return baseContract.relaySignal()
-        if (activeContract === 'stacks') {
-            if (stacksContract.isConnected) return stacksContract.relaySignal()
-            return { success: false, error: 'Please connect your Stacks wallet to sign transactions' }
-        }
+        if (activeContract === 'stacks') return stacksContract.relaySignal()
         return { success: false, error: 'No supported network connected' }
     }, [activeContract, baseContract, stacksContract])
 
     const updateAtmosphere = useCallback(async (weatherCode: number) => {
         if (activeContract === 'base') return baseContract.updateAtmosphere(weatherCode)
-        if (activeContract === 'stacks') {
-            if (stacksContract.isConnected) return stacksContract.updateAtmosphere(weatherCode)
-            return { success: false, error: 'Please connect your Stacks wallet to sign transactions' }
-        }
+        if (activeContract === 'stacks') return stacksContract.updateAtmosphere(weatherCode)
         return { success: false, error: 'No supported network connected' }
     }, [activeContract, baseContract, stacksContract])
 
     const nudgeFriend = useCallback(async (friendAddress: string) => {
         if (activeContract === 'base') return baseContract.nudgeFriend(friendAddress)
-        if (activeContract === 'stacks') {
-            if (stacksContract.isConnected) return stacksContract.nudgeFriend(friendAddress)
-            return { success: false, error: 'Please connect your Stacks wallet to sign transactions' }
-        }
+        if (activeContract === 'stacks') return stacksContract.nudgeFriend(friendAddress)
         return { success: false, error: 'No supported network connected' }
     }, [activeContract, baseContract, stacksContract])
 
     const commitMessage = useCallback(async (message: string) => {
         if (activeContract === 'base') return baseContract.commitMessage(message)
-        if (activeContract === 'stacks') {
-            if (stacksContract.isConnected) return stacksContract.commitMessage(message)
-            return { success: false, error: 'Please connect your Stacks wallet to sign transactions' }
-        }
+        if (activeContract === 'stacks') return stacksContract.commitMessage(message)
         return { success: false, error: 'No supported network connected' }
     }, [activeContract, baseContract, stacksContract])
 
     const predictPulse = useCallback(async (level: number) => {
         if (activeContract === 'base') return baseContract.predictPulse(level)
-        if (activeContract === 'stacks') {
-            if (stacksContract.isConnected) return stacksContract.predictPulse(level)
-            return { success: false, error: 'Please connect your Stacks wallet to sign transactions' }
-        }
+        if (activeContract === 'stacks') return stacksContract.predictPulse(level)
         return { success: false, error: 'No supported network connected' }
     }, [activeContract, baseContract, stacksContract])
 
     const claimDailyCombo = useCallback(async () => {
         if (activeContract === 'base') return baseContract.claimDailyCombo()
-        if (activeContract === 'stacks') {
-            if (stacksContract.isConnected) return stacksContract.claimDailyCombo()
-            return { success: false, error: 'Please connect your Stacks wallet to sign transactions' }
-        }
+        if (activeContract === 'stacks') return stacksContract.claimDailyCombo()
         return { success: false, error: 'No supported network connected' }
     }, [activeContract, baseContract, stacksContract])
 
@@ -256,8 +233,7 @@ export function useUnifiedContract() {
         activeContract,
         chainType: activeContract === 'base' ? 'evm' : activeContract === 'stacks' ? 'stacks' : 'unknown',
 
-        // Stacks-specific: whether we need @stacks/connect for transactions
-        needsStacksConnect,
+        // Stacks address (from either AppKit or StacksContext)
         stacksAddress,
         connectStacksForSigning,
 
