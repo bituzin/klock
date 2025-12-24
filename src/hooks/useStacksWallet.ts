@@ -101,7 +101,6 @@ export function useStacksWallet() {
             }
 
             console.log('[Stacks] Universal Provider obtained')
-            console.log('[Stacks] Session:', universalProvider.session)
 
             // Get the active session topic
             const session = universalProvider.session
@@ -109,21 +108,46 @@ export function useStacksWallet() {
                 throw new Error('No active WalletConnect session')
             }
 
-            // Determine the chain ID for Stacks
-            // Stacks mainnet: "stacks:1", testnet: "stacks:2147483648"
-            const chainId = isMainnet ? 'stacks:1' : 'stacks:2147483648'
+            console.log('[Stacks] Session namespaces:', Object.keys(session.namespaces || {}))
+            console.log('[Stacks] Full session:', JSON.stringify(session, null, 2))
 
-            console.log('[Stacks] Sending request to chain:', chainId)
+            // Find the correct chain ID from the session namespaces
+            // Xverse/Leather expose Stacks addresses under bip122 namespace
+            let targetChainId: string | undefined
 
-            // Send the stx_callContract request through the session
-            const result = await universalProvider.request({
+            // Check bip122 namespace for accounts
+            const bip122 = session.namespaces?.bip122
+            if (bip122?.accounts && bip122.accounts.length > 0) {
+                // Get the chain ID from the first account (format: bip122:chainRef:address)
+                const parts = bip122.accounts[0].split(':')
+                if (parts.length >= 2) {
+                    targetChainId = `${parts[0]}:${parts[1]}`
+                }
+                console.log('[Stacks] Found bip122 accounts:', bip122.accounts)
+            }
+
+            console.log('[Stacks] Using chain ID:', targetChainId || 'none')
+
+            // Prepare the request
+            const requestPayload = {
                 method: 'stx_callContract',
                 params: {
                     contract: contract.fullContractId,
                     functionName,
                     functionArgs,
                 }
-            }, chainId)
+            }
+
+            console.log('[Stacks] Request payload:', requestPayload)
+
+            // Send the request - try with bip122 chain if available
+            let result
+            if (targetChainId) {
+                result = await universalProvider.request(requestPayload, targetChainId)
+            } else {
+                // Fallback: try without specifying chain
+                result = await universalProvider.request(requestPayload)
+            }
 
             console.log('[Stacks] Transaction result:', result)
             setIsLoading(false)
@@ -137,7 +161,7 @@ export function useStacksWallet() {
         } catch (err: any) {
             const errorMessage = err?.message || err?.toString() || 'Transaction failed'
             console.error('[Stacks] Contract call error:', err)
-            console.error('[Stacks] Error details:', JSON.stringify(err, null, 2))
+            console.error('[Stacks] Error message:', errorMessage)
             setError(errorMessage)
             setIsLoading(false)
             return { success: false, error: errorMessage }
