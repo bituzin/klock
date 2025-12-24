@@ -21,7 +21,6 @@ import {
 import React, { type ReactNode } from 'react'
 import { cookieToInitialState, WagmiProvider, type Config } from 'wagmi'
 import { AuthProvider } from './AuthContext'
-import { StacksProvider } from './StacksContext'
 
 // Set up queryClient
 const queryClient = new QueryClient()
@@ -39,14 +38,14 @@ const metadata = {
 }
 
 // Set up Bitcoin Adapter
-// Note: BitcoinAdapter handles Bitcoin L1 only
-// Stacks is handled separately via StacksProvider using @stacks/connect
+// Note: BitcoinAdapter handles Bitcoin L1 and supports Stacks addresses via WalletConnect
+// Leather/Xverse wallets return Stacks addresses which we can use with stx_callContract RPC
 const bitcoinAdapter = new BitcoinAdapter({
     projectId
 })
 
 // Create the modal with EVM and Bitcoin support
-// Stacks uses a separate connection flow via @stacks/connect
+// Stacks transactions use Reown's stx_callContract RPC method via the same WalletConnect session
 const modal = createAppKit({
     adapters: [wagmiAdapter, bitcoinAdapter],
     projectId,
@@ -56,7 +55,7 @@ const modal = createAppKit({
         baseSepolia,
         // Additional EVM Networks
         mainnet, polygon, optimism, arbitrum, bsc, avalanche, celo, sepolia,
-        // Bitcoin Networks (L1 only - not Stacks)
+        // Bitcoin Networks - Leather/Xverse support both Bitcoin L1 and Stacks
         bitcoin, bitcoinTestnet
     ],
     defaultNetwork: base,
@@ -81,11 +80,9 @@ function ContextProvider({ children, cookies }: { children: ReactNode; cookies: 
     return (
         <WagmiProvider config={wagmiAdapter.wagmiConfig as Config} initialState={initialState}>
             <QueryClientProvider client={queryClient}>
-                <StacksProvider>
-                    <AuthProvider>
-                        {children}
-                    </AuthProvider>
-                </StacksProvider>
+                <AuthProvider>
+                    {children}
+                </AuthProvider>
             </QueryClientProvider>
         </WagmiProvider>
     )

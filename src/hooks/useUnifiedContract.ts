@@ -3,7 +3,7 @@
 import { useCallback, useMemo } from 'react'
 import { useAppKitAccount } from '@reown/appkit/react'
 import { usePulseContract } from './usePulseContract'
-import { useStacks } from '@/context/StacksContext'
+import { useStacksWallet } from './useStacksWallet'
 import { QUEST_IDS, QUEST_POINTS, STACKS_CONTRACTS } from '@/config/contracts'
 
 // Re-export types
@@ -28,59 +28,32 @@ export interface UnifiedContractInfo {
 }
 
 /**
- * Helper to detect if an address is a Stacks address
- */
-function isStacksAddress(address: string | undefined): boolean {
-    if (!address) return false
-    return address.startsWith('SP') || address.startsWith('ST')
-}
-
-/**
- * Helper to detect if address is mainnet Stacks
- */
-function isStacksMainnet(address: string | undefined): boolean {
-    if (!address) return false
-    return address.startsWith('SP')
-}
-
-/**
  * Unified hook that automatically routes to the correct contract (Base or Stacks)
  * based on the connected wallet's network
  * 
  * For Base (EVM): Uses AppKit + wagmi hooks
- * For Stacks: Detects SP/ST address from AppKit and executes via @stacks/connect
+ * For Stacks: Uses Reown's stx_callContract RPC method via WalletConnect
  */
 export function useUnifiedContract() {
     const { isConnected: isAppKitConnected, address: appKitAddress } = useAppKitAccount()
 
     // Get both contract systems
     const baseContract = usePulseContract()
-    const stacksContract = useStacks()
+    const stacksWallet = useStacksWallet()
 
-    // Detect if AppKit connected a Stacks address
-    const isStacksFromAppKit = isAppKitConnected && isStacksAddress(appKitAddress)
-    const isStacksMainnetFromAppKit = isStacksFromAppKit && isStacksMainnet(appKitAddress)
-
-    // Determine which contract to use
-    // Priority: 
-    // 1. StacksContext if connected via @stacks/connect
-    // 2. Stacks if AppKit connected with SP/ST address
-    // 3. Base if AppKit connected with EVM address on Base network
+    // Determine which contract to use based on address prefix
     const activeContract = useMemo(() => {
-        // First check StacksContext (connected via @stacks/connect)
-        if (stacksContract.isConnected) return 'stacks'
-
-        // Check if AppKit connected with a Stacks address
-        if (isStacksFromAppKit) return 'stacks'
+        // Check if connected with a Stacks address (SP/ST prefix)
+        if (stacksWallet.isConnected) return 'stacks'
 
         // Check if connected to Base EVM network
         if (isAppKitConnected && baseContract.isBaseNetwork) return 'base'
 
         return 'none'
-    }, [stacksContract.isConnected, isStacksFromAppKit, isAppKitConnected, baseContract.isBaseNetwork])
+    }, [stacksWallet.isConnected, isAppKitConnected, baseContract.isBaseNetwork])
 
-    // Determine the Stacks address to use
-    const stacksAddress = stacksContract.address || (isStacksFromAppKit ? appKitAddress : null)
+    // Determine the Stacks address
+    const stacksAddress = stacksWallet.address
 
     // Unified user profile
     const userProfile: UnifiedUserProfile | null = useMemo(() => {
@@ -94,18 +67,18 @@ export function useUnifiedContract() {
                 exists: baseContract.userProfile.exists,
             }
         }
-        if (activeContract === 'stacks' && stacksContract.userProfile) {
+        if (activeContract === 'stacks' && stacksWallet.userProfile) {
             return {
-                totalPoints: stacksContract.userProfile.totalPoints,
-                currentStreak: stacksContract.userProfile.currentStreak,
-                longestStreak: stacksContract.userProfile.longestStreak,
-                level: stacksContract.userProfile.level,
-                totalCheckins: stacksContract.userProfile.totalCheckins,
+                totalPoints: stacksWallet.userProfile.totalPoints,
+                currentStreak: stacksWallet.userProfile.currentStreak,
+                longestStreak: stacksWallet.userProfile.longestStreak,
+                level: stacksWallet.userProfile.level,
+                totalCheckins: stacksWallet.userProfile.totalCheckins,
                 exists: true,
             }
         }
         return null
-    }, [activeContract, baseContract.userProfile, stacksContract.userProfile])
+    }, [activeContract, baseContract.userProfile, stacksWallet.userProfile])
 
     // Unified contract info
     const contractInfo: UnifiedContractInfo = useMemo(() => {
@@ -118,23 +91,11 @@ export function useUnifiedContract() {
             }
         }
         if (activeContract === 'stacks') {
-            // Use StacksContext info if available, otherwise derive from AppKit address
-            if (stacksContract.isConnected) {
-                return {
-                    chainType: 'stacks' as const,
-                    network: stacksContract.contractInfo.network,
-                    contractAddress: stacksContract.contractInfo.contractAddress,
-                    explorerUrl: stacksContract.contractInfo.explorerUrl,
-                }
-            }
-            // Derive from AppKit Stacks address
-            const isMainnet = isStacksMainnetFromAppKit
-            const contract = isMainnet ? STACKS_CONTRACTS.mainnet : STACKS_CONTRACTS.testnet
             return {
                 chainType: 'stacks' as const,
-                network: isMainnet ? 'mainnet' as const : 'testnet' as const,
-                contractAddress: contract.contractAddress,
-                explorerUrl: contract.explorerUrl,
+                network: stacksWallet.contractInfo.network,
+                contractAddress: stacksWallet.contractInfo.contractAddress,
+                explorerUrl: stacksWallet.contractInfo.explorerUrl,
             }
         }
         return {
@@ -143,89 +104,82 @@ export function useUnifiedContract() {
             contractAddress: '',
             explorerUrl: '',
         }
-    }, [activeContract, baseContract, stacksContract, isStacksMainnetFromAppKit])
+    }, [activeContract, baseContract, stacksWallet])
 
     // Unified loading state
-    const isLoading = baseContract.isLoading || stacksContract.isLoading
+    const isLoading = baseContract.isLoading || stacksWallet.isLoading
 
     // Unified error state
-    const error = baseContract.error || stacksContract.error
+    const error = baseContract.error || stacksWallet.error
 
     // Unified quest execution - routes to correct contract
-    // For Stacks: Pass the address from AppKit so StacksContext can use it
     const dailyCheckin = useCallback(async () => {
         if (activeContract === 'base') return baseContract.dailyCheckin()
-        if (activeContract === 'stacks') {
-            // Pass stacksAddress (from AppKit or StacksContext) to enable transactions
-            return stacksContract.dailyCheckin(stacksAddress || undefined)
-        }
+        if (activeContract === 'stacks') return stacksWallet.dailyCheckin()
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract, stacksContract, stacksAddress])
+    }, [activeContract, baseContract, stacksWallet])
 
     const relaySignal = useCallback(async () => {
         if (activeContract === 'base') return baseContract.relaySignal()
-        if (activeContract === 'stacks') return stacksContract.relaySignal(stacksAddress || undefined)
+        if (activeContract === 'stacks') return stacksWallet.relaySignal()
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract, stacksContract, stacksAddress])
+    }, [activeContract, baseContract, stacksWallet])
 
     const updateAtmosphere = useCallback(async (weatherCode: number) => {
         if (activeContract === 'base') return baseContract.updateAtmosphere(weatherCode)
-        if (activeContract === 'stacks') return stacksContract.updateAtmosphere(weatherCode, stacksAddress || undefined)
+        if (activeContract === 'stacks') return stacksWallet.updateAtmosphere(weatherCode)
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract, stacksContract, stacksAddress])
+    }, [activeContract, baseContract, stacksWallet])
 
     const nudgeFriend = useCallback(async (friendAddress: string) => {
         if (activeContract === 'base') return baseContract.nudgeFriend(friendAddress)
-        if (activeContract === 'stacks') return stacksContract.nudgeFriend(friendAddress, stacksAddress || undefined)
+        if (activeContract === 'stacks') return stacksWallet.nudgeFriend(friendAddress)
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract, stacksContract, stacksAddress])
+    }, [activeContract, baseContract, stacksWallet])
 
     const commitMessage = useCallback(async (message: string) => {
         if (activeContract === 'base') return baseContract.commitMessage(message)
-        if (activeContract === 'stacks') return stacksContract.commitMessage(message, stacksAddress || undefined)
+        if (activeContract === 'stacks') return stacksWallet.commitMessage(message)
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract, stacksContract, stacksAddress])
+    }, [activeContract, baseContract, stacksWallet])
 
     const predictPulse = useCallback(async (level: number) => {
         if (activeContract === 'base') return baseContract.predictPulse(level)
-        if (activeContract === 'stacks') return stacksContract.predictPulse(level, stacksAddress || undefined)
+        if (activeContract === 'stacks') return stacksWallet.predictPulse(level)
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract, stacksContract, stacksAddress])
+    }, [activeContract, baseContract, stacksWallet])
 
     const claimDailyCombo = useCallback(async () => {
         if (activeContract === 'base') return baseContract.claimDailyCombo()
-        if (activeContract === 'stacks') return stacksContract.claimDailyCombo(stacksAddress || undefined)
+        if (activeContract === 'stacks') return stacksWallet.claimDailyCombo()
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract, stacksContract, stacksAddress])
+    }, [activeContract, baseContract, stacksWallet])
 
     // Unified refresh
     const refreshData = useCallback(async () => {
         if (activeContract === 'base') return baseContract.refreshData()
-        if (activeContract === 'stacks') return stacksContract.refreshData()
-    }, [activeContract, baseContract, stacksContract])
+        if (activeContract === 'stacks') return stacksWallet.refreshData()
+    }, [activeContract, baseContract, stacksWallet])
 
     // Check if quest is completed
     const isQuestCompleted = useCallback((questId: number): boolean => {
         if (activeContract === 'base') return baseContract.isQuestCompleted(questId)
-        if (activeContract === 'stacks') return stacksContract.isQuestCompleted(questId)
+        if (activeContract === 'stacks') return stacksWallet.isQuestCompleted(questId)
         return false
-    }, [activeContract, baseContract, stacksContract])
+    }, [activeContract, baseContract, stacksWallet])
 
     // Check combo availability
     const checkComboAvailable = useCallback(async (): Promise<boolean> => {
         if (activeContract === 'base') return baseContract.checkComboAvailable()
         // For Stacks, check locally based on completed quests
         if (activeContract === 'stacks') {
-            const hasCheckin = stacksContract.isQuestCompleted(QUEST_IDS.DAILY_CHECKIN)
-            const hasAtmosphere = stacksContract.isQuestCompleted(QUEST_IDS.UPDATE_ATMOSPHERE)
-            const hasMessage = stacksContract.isQuestCompleted(QUEST_IDS.COMMIT_MESSAGE)
+            const hasCheckin = stacksWallet.isQuestCompleted(QUEST_IDS.DAILY_CHECKIN)
+            const hasAtmosphere = stacksWallet.isQuestCompleted(QUEST_IDS.UPDATE_ATMOSPHERE)
+            const hasMessage = stacksWallet.isQuestCompleted(QUEST_IDS.COMMIT_MESSAGE)
             return hasCheckin && hasAtmosphere && hasMessage
         }
         return false
-    }, [activeContract, baseContract, stacksContract])
-
-    // Connect Stacks wallet for signing (when AppKit detected Stacks address)
-    const connectStacksForSigning = stacksContract.connectWallet
+    }, [activeContract, baseContract, stacksWallet])
 
     return {
         // Connection state
@@ -233,9 +187,8 @@ export function useUnifiedContract() {
         activeContract,
         chainType: activeContract === 'base' ? 'evm' : activeContract === 'stacks' ? 'stacks' : 'unknown',
 
-        // Stacks address (from either AppKit or StacksContext)
+        // Stacks address
         stacksAddress,
-        connectStacksForSigning,
 
         // Contract info
         contractInfo,
@@ -264,7 +217,7 @@ export function useUnifiedContract() {
 
         // Raw contract instances (for advanced use)
         baseContract,
-        stacksContract,
+        stacksWallet,
 
         // Quest metadata
         QUEST_IDS,
