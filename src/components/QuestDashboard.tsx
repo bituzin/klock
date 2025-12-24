@@ -142,6 +142,9 @@ export default function QuestDashboard() {
 
             if (!result.success && result.error) {
                 setLocalError(result.error)
+            } else if (result.success) {
+                // Refresh data after successful transaction
+                await refreshData()
             }
         } catch (err) {
             setLocalError(err instanceof Error ? err.message : 'Transaction failed')
@@ -149,7 +152,7 @@ export default function QuestDashboard() {
             setPendingQuest(null)
         }
     }, [isConnected, activeContract, isQuestCompleted, dailyCheckin, relaySignal,
-        updateAtmosphere, nudgeFriend, commitMessage, predictPulse,
+        updateAtmosphere, nudgeFriend, commitMessage, predictPulse, refreshData,
         showMessageInput, message, showFriendInput, friendAddress])
 
     // Handle claiming combo
@@ -163,13 +166,14 @@ export default function QuestDashboard() {
                 setLocalError(result.error)
             } else {
                 setComboActive(false)
+                await refreshData()
             }
         } catch (err) {
             setLocalError(err instanceof Error ? err.message : 'Failed to claim combo')
         } finally {
             setPendingQuest(null)
         }
-    }, [comboActive, claimDailyCombo])
+    }, [comboActive, claimDailyCombo, refreshData])
 
     return (
         <div className="w-full">

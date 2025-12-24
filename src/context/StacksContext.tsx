@@ -16,6 +16,64 @@ export interface StacksUserProfile {
     totalCheckins: number
 }
 
+// Helper to fetch quest statuses from the contract
+async function fetchQuestStatuses(
+    address: string,
+    contractInfo: { apiUrl: string; contractAddress: string; contractName: string }
+): Promise<StacksUserProfile | null> {
+    try {
+        // For each quest ID (1-10), check if completed today
+        let questBitmap = 0
+
+        for (let questId = 1; questId <= 10; questId++) {
+            try {
+                const response = await fetch(
+                    `${contractInfo.apiUrl}/v2/contracts/call-read/${contractInfo.contractAddress}/${contractInfo.contractName}/get-quest-status`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            sender: address,
+                            arguments: [
+                                // u<quest-id> - unsigned int
+                                `0x0100000000000000000000000000000000${questId.toString(16).padStart(2, '0')}`
+                            ],
+                        }),
+                    }
+                )
+
+                if (response.ok) {
+                    const data = await response.json()
+                    // If the response indicates the quest is completed, set the bit
+                    if (data.okay && data.result) {
+                        // Clarity true = 0x03, false = 0x04
+                        if (data.result === '0x03') {
+                            questBitmap |= (1 << (questId - 1))
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(`[Stacks] Error checking quest ${questId}:`, err)
+            }
+        }
+
+        console.log('[Stacks] Quest bitmap:', questBitmap.toString(2).padStart(10, '0'))
+
+        return {
+            totalPoints: 0, // Would need to fetch from contract
+            currentStreak: 0,
+            longestStreak: 0,
+            lastCheckinDay: 0,
+            questBitmap,
+            level: 1,
+            totalCheckins: 0,
+        }
+    } catch (err) {
+        console.error('[Stacks] Error fetching quest statuses:', err)
+        return null
+    }
+}
+
 interface StacksContextType {
     // Connection
     isConnected: boolean
@@ -203,6 +261,8 @@ export function StacksProvider({ children }: { children: ReactNode }) {
         try {
             setIsLoading(true)
 
+            // For Stacks, we need to call the read-only function get-user-profile
+            // The contract returns a tuple with user stats
             const response = await fetch(
                 `${contractInfo.apiUrl}/v2/contracts/call-read/${contractInfo.contractAddress}/${contractInfo.contractName}/get-user-profile`,
                 {
@@ -211,7 +271,8 @@ export function StacksProvider({ children }: { children: ReactNode }) {
                     body: JSON.stringify({
                         sender: address,
                         arguments: [
-                            `0x${Buffer.from(address).toString('hex')}`
+                            // Principal argument needs to be CV hex encoded
+                            `0x0516${Buffer.from(address.slice(2)).toString('hex').padStart(40, '0')}`
                         ],
                     }),
                 }
@@ -219,9 +280,20 @@ export function StacksProvider({ children }: { children: ReactNode }) {
 
             if (response.ok) {
                 const data = await response.json()
+                console.log('[Stacks] User profile API response:', data)
+
                 if (data.okay && data.result) {
-                    console.log('[Stacks] User profile raw:', data.result)
-                    // TODO: Parse Clarity tuple response
+                    // Parse the Clarity hex response
+                    // For now, let's try a simpler approach - check today's quest status
+                    // by calling get-quest-status for each quest
+                    try {
+                        const questStatuses = await fetchQuestStatuses(address, contractInfo)
+                        if (questStatuses) {
+                            setUserProfile(questStatuses)
+                        }
+                    } catch (parseErr) {
+                        console.error('[Stacks] Error parsing profile:', parseErr)
+                    }
                 }
             }
         } catch (err) {
