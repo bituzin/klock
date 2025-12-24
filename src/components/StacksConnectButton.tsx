@@ -1,7 +1,9 @@
+
 'use client'
 
 import { useStacks } from '@/context/StacksContext'
 import { Loader2, Wallet } from 'lucide-react'
+
 
 interface StacksConnectButtonProps {
     className?: string
@@ -14,6 +16,7 @@ export default function StacksConnectButton({
 }: StacksConnectButtonProps) {
     const { isConnected, address, connect, disconnect, isLoading } = useStacks()
 
+
     if (isLoading) {
         return (
             <button
@@ -25,6 +28,7 @@ export default function StacksConnectButton({
             </button>
         )
     }
+
 
     if (isConnected && address) {
         return (
