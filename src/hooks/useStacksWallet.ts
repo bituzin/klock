@@ -109,24 +109,47 @@ export function useStacksWallet() {
             }
 
             console.log('[Stacks] Session namespaces:', Object.keys(session.namespaces || {}))
-            console.log('[Stacks] Full session:', JSON.stringify(session, null, 2))
 
             // Find the correct chain ID from the session namespaces
-            // Xverse/Leather expose Stacks addresses under bip122 namespace
+            // Priority: 1. stacks namespace, 2. bip122 namespace with STX address
             let targetChainId: string | undefined
+            let hasStacksMethods = false
 
-            // Check bip122 namespace for accounts
-            const bip122 = session.namespaces?.bip122
-            if (bip122?.accounts && bip122.accounts.length > 0) {
-                // Get the chain ID from the first account (format: bip122:chainRef:address)
-                const parts = bip122.accounts[0].split(':')
+            // First check if stacks namespace is available (preferred)
+            const stacksNs = session.namespaces?.stacks
+            if (stacksNs?.accounts && stacksNs.accounts.length > 0) {
+                // Get the chain ID from the first stacks account (format: stacks:chainRef:address)
+                const parts = stacksNs.accounts[0].split(':')
                 if (parts.length >= 2) {
                     targetChainId = `${parts[0]}:${parts[1]}`
                 }
-                console.log('[Stacks] Found bip122 accounts:', bip122.accounts)
+                // Check if stacks methods are available
+                hasStacksMethods = stacksNs.methods?.includes('stx_callContract') || false
+                console.log('[Stacks] Found stacks namespace:', stacksNs.accounts)
+                console.log('[Stacks] Stacks methods:', stacksNs.methods)
             }
 
-            console.log('[Stacks] Using chain ID:', targetChainId || 'none')
+            // If no stacks namespace or no methods, check bip122 (where Xverse puts STX addresses)
+            if (!targetChainId || !hasStacksMethods) {
+                const bip122 = session.namespaces?.bip122
+                if (bip122?.accounts && bip122.accounts.length > 0) {
+                    const parts = bip122.accounts[0].split(':')
+                    if (parts.length >= 2) {
+                        targetChainId = `${parts[0]}:${parts[1]}`
+                    }
+                    console.log('[Stacks] Using bip122 namespace:', bip122.accounts)
+                    console.log('[Stacks] bip122 methods:', bip122.methods)
+                }
+            }
+
+            // If we have stacks in the session (even without methods), try stacks chain ID
+            if (isMainnet) {
+                targetChainId = 'stacks:1'
+            } else if (address?.startsWith('ST')) {
+                targetChainId = 'stacks:2147483648'
+            }
+
+            console.log('[Stacks] Final chain ID:', targetChainId || 'none')
 
             // Prepare the request
             const requestPayload = {
@@ -140,12 +163,11 @@ export function useStacksWallet() {
 
             console.log('[Stacks] Request payload:', requestPayload)
 
-            // Send the request - try with bip122 chain if available
+            // Send the request with the determined chain ID
             let result
             if (targetChainId) {
                 result = await universalProvider.request(requestPayload, targetChainId)
             } else {
-                // Fallback: try without specifying chain
                 result = await universalProvider.request(requestPayload)
             }
 

@@ -38,14 +38,12 @@ const metadata = {
 }
 
 // Set up Bitcoin Adapter
-// Leather/Xverse wallets connect via WalletConnect and return both BTC and STX addresses
-// We detect STX addresses by their prefix (SP/ST) and use stx_callContract RPC
 const bitcoinAdapter = new BitcoinAdapter({
     projectId
 })
 
-// Create the modal with EVM and Bitcoin support
-// For Stacks: Connect via WalletConnect QR -> Leather returns STX address -> Use stx_callContract RPC
+// Create the modal with EVM, Bitcoin, and Stacks support
+// Uses universalProviderConfigOverride to request Stacks methods from wallets
 const modal = createAppKit({
     adapters: [wagmiAdapter, bitcoinAdapter],
     projectId,
@@ -55,7 +53,7 @@ const modal = createAppKit({
         baseSepolia,
         // Additional EVM Networks
         mainnet, polygon, optimism, arbitrum, bsc, avalanche, celo, sepolia,
-        // Bitcoin Networks - Leather/Xverse connect here and provide STX addresses too
+        // Bitcoin Networks
         bitcoin, bitcoinTestnet,
     ],
     defaultNetwork: base,
@@ -64,6 +62,40 @@ const modal = createAppKit({
         analytics: true,
         email: false,
         socials: []
+    },
+    // Configure Universal Provider to request Stacks methods
+    // This tells WalletConnect to ask the wallet to enable these methods
+    universalProviderConfigOverride: {
+        methods: {
+            // Default Bitcoin methods
+            bip122: [
+                'sendTransfer',
+                'signMessage',
+                'signPsbt',
+                'getAccountAddresses'
+            ],
+            // Stacks methods - these are the RPC methods for Stacks transactions
+            stacks: [
+                'stx_getAddresses',
+                'stx_transferStx',
+                'stx_signTransaction',
+                'stx_callContract',
+                'stx_signMessage',
+                'stx_signStructuredMessage'
+            ]
+        },
+        chains: {
+            bip122: ['000000000019d6689c085ae165831e93', '000000000933ea01ad0ee984209779ba'],
+            stacks: ['1', '2147483648']
+        },
+        events: {
+            bip122: ['accountsChanged', 'chainChanged'],
+            stacks: ['accountsChanged', 'chainChanged']
+        },
+        rpcMap: {
+            'stacks:1': 'https://api.mainnet.hiro.so',
+            'stacks:2147483648': 'https://api.testnet.hiro.so'
+        }
     },
     themeMode: 'light',
     themeVariables: {
