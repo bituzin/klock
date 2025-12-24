@@ -1,6 +1,6 @@
 import ConnectButton from '@/components/ConnectButton'
 import HeroActions from '@/components/HeroActions'
-import { Zap, Globe, Users, TrendingUp, Shield, Sparkles, ArrowRight } from 'lucide-react'
+import { Zap, Globe, Users, TrendingUp, Shield, Sparkles, ArrowRight, Trophy } from 'lucide-react'
 import Link from 'next/link'
 
 export default function Home() {
@@ -9,11 +9,20 @@ export default function Home() {
       {/* Navigation */}
       <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm">
         <div className="flex justify-between items-center max-w-7xl mx-auto px-4 md:px-8 py-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-[#FF6B00] to-[#FF8533] rounded-lg flex items-center justify-center shadow-lg">
-              <Zap className="text-white" size={20} />
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-[#FF6B00] to-[#FF8533] rounded-lg flex items-center justify-center shadow-lg">
+                <Zap className="text-white" size={20} />
+              </div>
+              <span className="font-bold text-xl md:text-2xl tracking-tight text-gray-900">PULSE</span>
             </div>
-            <span className="font-bold text-xl md:text-2xl tracking-tight text-gray-900">PULSE</span>
+            <Link
+              href="/leaderboard"
+              className="hidden md:flex items-center gap-1 px-3 py-1.5 text-gray-600 hover:text-[#FF6B00] hover:bg-orange-50 text-sm font-medium rounded-full transition-colors"
+            >
+              <Trophy size={16} />
+              Leaderboard
+            </Link>
           </div>
           <ConnectButton />
         </div>
