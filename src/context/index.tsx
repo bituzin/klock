@@ -85,8 +85,8 @@ const modal = createAppKit({
             ]
         },
         chains: {
-            bip122: ['000000000019d6689c085ae165831e93', '000000000933ea01ad0ee984209779ba'],
-            stacks: ['1', '2147483648']
+            bip122: ['bip122:000000000019d6689c085ae165831e93', 'bip122:000000000933ea01ad0ee984209779ba'],
+            stacks: ['stacks:1', 'stacks:2147483648']
         },
         events: {
             bip122: ['accountsChanged', 'chainChanged'],
