@@ -1,26 +1,42 @@
 'use client'
 
 import { useAuth } from '@/context/AuthContext'
+import { useStacks } from '@/context/StacksContext'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import QuestDashboard from '@/components/QuestDashboard'
-import ConnectButton from '@/components/ConnectButton'
 import { Zap, LogOut, User, Home } from 'lucide-react'
 import Link from 'next/link'
 
 export default function DashboardPage() {
-    const { isLoggedIn, isConnected, address, logout } = useAuth()
+    const { isLoggedIn, address: evmAddress, logout: evmLogout } = useAuth()
+    const { isConnected: isStacksConnected, address: stacksAddress, disconnect: stacksDisconnect } = useStacks()
     const router = useRouter()
 
-    // Redirect to home if not logged in
+    // User is authenticated if logged in via EVM OR connected via Stacks
+    const isAuthenticated = isLoggedIn || isStacksConnected
+    const displayAddress = stacksAddress || evmAddress
+
+    // Redirect to home if not authenticated
     useEffect(() => {
-        if (!isLoggedIn) {
+        if (!isAuthenticated) {
             router.push('/')
         }
-    }, [isLoggedIn, router])
+    }, [isAuthenticated, router])
+
+    // Handle logout for both wallet types
+    const handleLogout = () => {
+        if (isStacksConnected) {
+            stacksDisconnect()
+        }
+        if (isLoggedIn) {
+            evmLogout()
+        }
+        router.push('/')
+    }
 
     // Show loading while checking auth state
-    if (!isLoggedIn) {
+    if (!isAuthenticated) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-[#F5F5F5] via-[#FFF0E6] to-[#F5F5F5] flex items-center justify-center">
                 <div className="text-center">
@@ -52,13 +68,23 @@ export default function DashboardPage() {
 
                     <div className="flex items-center gap-4">
                         {/* User Info */}
-                        <div className="flex items-center gap-2 bg-green-50 px-3 py-1.5 rounded-full border border-green-200">
-                            <div className="w-6 h-6 bg-gradient-to-br from-green-400 to-green-600 rounded-full flex items-center justify-center">
+                        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${isStacksConnected
+                                ? 'bg-purple-50 border-purple-200'
+                                : 'bg-green-50 border-green-200'
+                            }`}>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isStacksConnected
+                                    ? 'bg-gradient-to-br from-purple-400 to-purple-600'
+                                    : 'bg-gradient-to-br from-green-400 to-green-600'
+                                }`}>
                                 <User size={12} className="text-white" />
                             </div>
-                            <span className="text-sm font-medium text-green-900">
-                                {address?.slice(0, 6)}...{address?.slice(-4)}
+                            <span className={`text-sm font-medium ${isStacksConnected ? 'text-purple-900' : 'text-green-900'
+                                }`}>
+                                {displayAddress?.slice(0, 6)}...{displayAddress?.slice(-4)}
                             </span>
+                            {isStacksConnected && (
+                                <span className="text-xs text-purple-600 font-medium">STX</span>
+                            )}
                         </div>
 
                         {/* Home Link */}
@@ -72,10 +98,7 @@ export default function DashboardPage() {
 
                         {/* Logout */}
                         <button
-                            onClick={() => {
-                                logout()
-                                router.push('/')
-                            }}
+                            onClick={handleLogout}
                             className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
                             title="Logout"
                         >
