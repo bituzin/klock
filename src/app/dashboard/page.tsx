@@ -5,7 +5,7 @@ import { useStacks } from '@/context/StacksContext'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import QuestDashboard from '@/components/QuestDashboard'
-import { Zap, LogOut, User, Home } from 'lucide-react'
+import { Zap, LogOut, User, Home, Trophy } from 'lucide-react'
 import Link from 'next/link'
 
 export default function DashboardPage() {
@@ -61,20 +61,29 @@ export default function DashboardPage() {
                             </div>
                             <span className="font-bold text-xl md:text-2xl tracking-tight text-gray-900">PULSE</span>
                         </Link>
-                        <span className="hidden md:inline-block px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
-                            Dashboard
-                        </span>
+                        <div className="flex items-center gap-2">
+                            <span className="hidden md:inline-block px-3 py-1 bg-orange-100 text-[#FF6B00] text-xs font-semibold rounded-full">
+                                Dashboard
+                            </span>
+                            <Link
+                                href="/leaderboard"
+                                className="hidden md:flex items-center gap-1 px-3 py-1 text-gray-600 hover:text-[#FF6B00] hover:bg-orange-50 text-xs font-semibold rounded-full transition-colors"
+                            >
+                                <Trophy size={14} />
+                                Leaderboard
+                            </Link>
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-4">
                         {/* User Info */}
                         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${isStacksConnected
-                                ? 'bg-purple-50 border-purple-200'
-                                : 'bg-green-50 border-green-200'
+                            ? 'bg-purple-50 border-purple-200'
+                            : 'bg-green-50 border-green-200'
                             }`}>
                             <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isStacksConnected
-                                    ? 'bg-gradient-to-br from-purple-400 to-purple-600'
-                                    : 'bg-gradient-to-br from-green-400 to-green-600'
+                                ? 'bg-gradient-to-br from-purple-400 to-purple-600'
+                                : 'bg-gradient-to-br from-green-400 to-green-600'
                                 }`}>
                                 <User size={12} className="text-white" />
                             </div>
