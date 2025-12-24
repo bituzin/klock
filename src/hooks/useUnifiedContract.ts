@@ -3,12 +3,11 @@
 import { useCallback, useMemo } from 'react'
 import { useAppKitAccount } from '@reown/appkit/react'
 import { usePulseContract } from './usePulseContract'
-import { useStacksContract, useMultiChainContract } from './useStacksContract'
+import { useStacks } from '@/context/StacksContext'
 import { QUEST_IDS, QUEST_POINTS } from '@/config/contracts'
 
 // Re-export types
 export type { UserProfile, GlobalStats, ContractInfo } from './usePulseContract'
-export type { StacksUserProfile, StacksContractInfo } from './useStacksContract'
 
 // Unified user profile type
 export interface UnifiedUserProfile {
@@ -32,26 +31,23 @@ export interface UnifiedContractInfo {
  * Unified hook that automatically routes to the correct contract (Base or Stacks)
  * based on the connected wallet's network
  * 
- * Usage:
- * const { dailyCheckin, userProfile, chainType } = useUnifiedContract()
- * 
- * The hook will automatically call the correct contract method based on whether
- * the user is connected to Base (EVM) or Stacks network.
+ * For Base (EVM): Uses AppKit + wagmi hooks
+ * For Stacks: Uses @stacks/connect via StacksContext
  */
 export function useUnifiedContract() {
-    const { caipAddress, isConnected } = useAppKitAccount()
-    const { chainType, isStacks, isEVM } = useMultiChainContract()
+    const { isConnected: isEVMConnected } = useAppKitAccount()
 
-    // Get both contract hooks
+    // Get both contract systems
     const baseContract = usePulseContract()
-    const stacksContract = useStacksContract()
+    const stacksContract = useStacks()
 
-    // Determine which contract to use based on connected network
+    // Determine which contract to use
+    // Priority: Stacks if connected, then Base if connected
     const activeContract = useMemo(() => {
-        if (isStacks) return 'stacks'
-        if (isEVM && baseContract.isBaseNetwork) return 'base'
+        if (stacksContract.isConnected) return 'stacks'
+        if (isEVMConnected && baseContract.isBaseNetwork) return 'base'
         return 'none'
-    }, [isStacks, isEVM, baseContract.isBaseNetwork])
+    }, [stacksContract.isConnected, isEVMConnected, baseContract.isBaseNetwork])
 
     // Unified user profile
     const userProfile: UnifiedUserProfile | null = useMemo(() => {
@@ -115,56 +111,56 @@ export function useUnifiedContract() {
         if (activeContract === 'base') return baseContract.dailyCheckin()
         if (activeContract === 'stacks') return stacksContract.dailyCheckin()
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract.dailyCheckin, stacksContract.dailyCheckin])
+    }, [activeContract, baseContract, stacksContract])
 
     const relaySignal = useCallback(async () => {
         if (activeContract === 'base') return baseContract.relaySignal()
         if (activeContract === 'stacks') return stacksContract.relaySignal()
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract.relaySignal, stacksContract.relaySignal])
+    }, [activeContract, baseContract, stacksContract])
 
     const updateAtmosphere = useCallback(async (weatherCode: number) => {
         if (activeContract === 'base') return baseContract.updateAtmosphere(weatherCode)
         if (activeContract === 'stacks') return stacksContract.updateAtmosphere(weatherCode)
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract.updateAtmosphere, stacksContract.updateAtmosphere])
+    }, [activeContract, baseContract, stacksContract])
 
     const nudgeFriend = useCallback(async (friendAddress: string) => {
         if (activeContract === 'base') return baseContract.nudgeFriend(friendAddress)
         if (activeContract === 'stacks') return stacksContract.nudgeFriend(friendAddress)
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract.nudgeFriend, stacksContract.nudgeFriend])
+    }, [activeContract, baseContract, stacksContract])
 
     const commitMessage = useCallback(async (message: string) => {
         if (activeContract === 'base') return baseContract.commitMessage(message)
         if (activeContract === 'stacks') return stacksContract.commitMessage(message)
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract.commitMessage, stacksContract.commitMessage])
+    }, [activeContract, baseContract, stacksContract])
 
     const predictPulse = useCallback(async (level: number) => {
         if (activeContract === 'base') return baseContract.predictPulse(level)
         if (activeContract === 'stacks') return stacksContract.predictPulse(level)
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract.predictPulse, stacksContract.predictPulse])
+    }, [activeContract, baseContract, stacksContract])
 
     const claimDailyCombo = useCallback(async () => {
         if (activeContract === 'base') return baseContract.claimDailyCombo()
         if (activeContract === 'stacks') return stacksContract.claimDailyCombo()
         return { success: false, error: 'No supported network connected' }
-    }, [activeContract, baseContract.claimDailyCombo, stacksContract.claimDailyCombo])
+    }, [activeContract, baseContract, stacksContract])
 
     // Unified refresh
     const refreshData = useCallback(async () => {
         if (activeContract === 'base') return baseContract.refreshData()
         if (activeContract === 'stacks') return stacksContract.refreshData()
-    }, [activeContract, baseContract.refreshData, stacksContract.refreshData])
+    }, [activeContract, baseContract, stacksContract])
 
     // Check if quest is completed
     const isQuestCompleted = useCallback((questId: number): boolean => {
         if (activeContract === 'base') return baseContract.isQuestCompleted(questId)
         if (activeContract === 'stacks') return stacksContract.isQuestCompleted(questId)
         return false
-    }, [activeContract, baseContract.isQuestCompleted, stacksContract.isQuestCompleted])
+    }, [activeContract, baseContract, stacksContract])
 
     // Check combo availability
     const checkComboAvailable = useCallback(async (): Promise<boolean> => {
@@ -177,13 +173,13 @@ export function useUnifiedContract() {
             return hasCheckin && hasAtmosphere && hasMessage
         }
         return false
-    }, [activeContract, baseContract.checkComboAvailable, stacksContract.isQuestCompleted])
+    }, [activeContract, baseContract, stacksContract])
 
     return {
         // Connection state
-        isConnected,
+        isConnected: activeContract !== 'none',
         activeContract,
-        chainType,
+        chainType: activeContract === 'base' ? 'evm' : activeContract === 'stacks' ? 'stacks' : 'unknown',
 
         // Contract info
         contractInfo,
@@ -210,7 +206,7 @@ export function useUnifiedContract() {
         isQuestCompleted,
         checkComboAvailable,
 
-        // Raw contract hooks (for advanced use)
+        // Raw contract instances (for advanced use)
         baseContract,
         stacksContract,
 
