@@ -19,6 +19,7 @@ import {
     bitcoinTestnet,
 } from '@reown/appkit/networks'
 import React, { type ReactNode } from 'react'
+import dynamic from 'next/dynamic'
 import { cookieToInitialState, WagmiProvider, type Config } from 'wagmi'
 import { AuthProvider } from './AuthContext'
 
@@ -107,12 +108,20 @@ const modal = createAppKit({
 function ContextProvider({ children, cookies }: { children: ReactNode; cookies: string | null }) {
     const initialState = cookieToInitialState(wagmiAdapter.wagmiConfig as Config, cookies)
 
+    // Import StacksProvider dynamically to avoid SSR issues
+    const StacksProviderWrapper = dynamic(
+        () => import('./StacksContext').then(mod => mod.StacksProvider),
+        { ssr: false }
+    )
+
     return (
         <WagmiProvider config={wagmiAdapter.wagmiConfig as Config} initialState={initialState}>
             <QueryClientProvider client={queryClient}>
-                <AuthProvider>
-                    {children}
-                </AuthProvider>
+                <StacksProviderWrapper>
+                    <AuthProvider>
+                        {children}
+                    </AuthProvider>
+                </StacksProviderWrapper>
             </QueryClientProvider>
         </WagmiProvider>
     )
