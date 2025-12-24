@@ -1,20 +1,9 @@
 'use client'
 
 import React, { createContext, useContext, useCallback, useState, useEffect, ReactNode } from 'react'
-import { showConnect, openContractCall, UserSession, AppConfig } from '@stacks/connect'
-import { STACKS_MAINNET, STACKS_TESTNET } from '@stacks/network'
-import {
-    uintCV,
-    stringAsciiCV,
-    principalCV,
-    cvToJSON,
-    ClarityType,
-} from '@stacks/transactions'
+import { connect, request, isConnected, disconnect as stacksDisconnect, getLocalStorage } from '@stacks/connect'
+import { uintCV, stringAsciiCV, principalCV } from '@stacks/transactions'
 import { STACKS_CONTRACTS } from '@/config/contracts'
-
-// App configuration
-const appConfig = new AppConfig(['store_write', 'publish_data'])
-const userSession = new UserSession({ appConfig })
 
 // Types
 export interface StacksUserProfile {
@@ -32,7 +21,7 @@ interface StacksContextType {
     isConnected: boolean
     address: string | null
     isMainnet: boolean
-    connect: () => void
+    connect: () => Promise<void>
     disconnect: () => void
 
     // Contract info
@@ -66,7 +55,7 @@ interface StacksContextType {
 const StacksContext = createContext<StacksContextType | undefined>(undefined)
 
 export function StacksProvider({ children }: { children: ReactNode }) {
-    const [isConnected, setIsConnected] = useState(false)
+    const [connected, setConnected] = useState(false)
     const [address, setAddress] = useState<string | null>(null)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -78,82 +67,92 @@ export function StacksProvider({ children }: { children: ReactNode }) {
     // Get contract info
     const contractInfo = isMainnet ? STACKS_CONTRACTS.mainnet : STACKS_CONTRACTS.testnet
 
-    // Get network
-    const network = isMainnet ? STACKS_MAINNET : STACKS_TESTNET
-
     // Check if already connected on mount
     useEffect(() => {
-        if (userSession.isUserSignedIn()) {
-            const userData = userSession.loadUserData()
-            const userAddress = userData.profile?.stxAddress?.mainnet || userData.profile?.stxAddress?.testnet
-            if (userAddress) {
-                setAddress(userAddress)
-                setIsConnected(true)
+        const checkConnection = () => {
+            const isAlreadyConnected = isConnected()
+            if (isAlreadyConnected) {
+                const storage = getLocalStorage()
+                if (storage?.addresses?.stx?.[0]?.address) {
+                    setAddress(storage.addresses.stx[0].address)
+                    setConnected(true)
+                }
             }
         }
+        checkConnection()
     }, [])
 
     // Connect to Stacks wallet
-    const connect = useCallback(() => {
-        showConnect({
-            appDetails: {
-                name: 'PULSE - Social Ritual dApp',
-                icon: 'https://avatars.githubusercontent.com/u/179229932',
-            },
-            onFinish: () => {
-                const userData = userSession.loadUserData()
-                const userAddress = userData.profile?.stxAddress?.mainnet || userData.profile?.stxAddress?.testnet
-                if (userAddress) {
-                    setAddress(userAddress)
-                    setIsConnected(true)
-                }
-            },
-            userSession,
-        })
+    const handleConnect = useCallback(async () => {
+        try {
+            setIsLoading(true)
+            setError(null)
+
+            const result = await connect()
+
+            console.log('[Stacks] Connect result:', result)
+
+            // Get the STX address from the result
+            const stxAddress = result.addresses.find(a => a.symbol === 'STX')?.address
+
+            if (stxAddress) {
+                setAddress(stxAddress)
+                setConnected(true)
+            }
+        } catch (err: any) {
+            console.error('[Stacks] Connect error:', err)
+            setError(err?.message || 'Failed to connect')
+        } finally {
+            setIsLoading(false)
+        }
     }, [])
 
     // Disconnect
-    const disconnect = useCallback(() => {
-        userSession.signUserOut()
+    const handleDisconnect = useCallback(() => {
+        stacksDisconnect()
         setAddress(null)
-        setIsConnected(false)
+        setConnected(false)
         setUserProfile(null)
     }, [])
 
     // Execute contract call helper
     const executeContractCall = useCallback(async (
         functionName: string,
-        functionArgs: any[] = [],
-        postConditions: any[] = []
+        functionArgs: any[] = []
     ): Promise<{ success: boolean; txId?: string; error?: string }> => {
-        if (!isConnected || !address) {
+        if (!connected || !address) {
             return { success: false, error: 'Wallet not connected' }
         }
 
         setIsLoading(true)
         setError(null)
 
-        return new Promise((resolve) => {
-            openContractCall({
-                network,
-                contractAddress: contractInfo.contractAddress,
-                contractName: contractInfo.contractName,
+        try {
+            // Use the new request API for contract calls
+            const result = await request('stx_callContract', {
+                contract: contractInfo.fullContractId,
                 functionName,
-                functionArgs,
-                postConditions,
-                onFinish: (data) => {
-                    console.log('[Stacks] Transaction submitted:', data.txId)
-                    setIsLoading(false)
-                    resolve({ success: true, txId: data.txId })
-                },
-                onCancel: () => {
-                    console.log('[Stacks] Transaction cancelled')
-                    setIsLoading(false)
-                    resolve({ success: false, error: 'Transaction cancelled' })
-                },
+                functionArgs: functionArgs.map(arg => {
+                    // Serialize Clarity values to hex if needed
+                    if (typeof arg === 'object' && arg.type) {
+                        // Already a Clarity value, convert to hex
+                        return arg
+                    }
+                    return arg
+                }),
             })
-        })
-    }, [isConnected, address, network, contractInfo])
+
+            console.log('[Stacks] Transaction result:', result)
+            setIsLoading(false)
+            return { success: true, txId: result.txid }
+        } catch (err: any) {
+            const errorMessage = err?.message || 'Transaction failed'
+            console.error('[Stacks] Contract call error:', err)
+            setError(errorMessage)
+            setIsLoading(false)
+            return { success: false, error: errorMessage }
+        }
+    }, [connected, address, contractInfo])
 
     // Quest functions
     const dailyCheckin = useCallback(() =>
@@ -192,7 +191,7 @@ export function StacksProvider({ children }: { children: ReactNode }) {
     )
 
     // Check if quest is completed
-    const isQuestCompleted = useCallback((questId: number): boolean => {
+    const isQuestCompletedFn = useCallback((questId: number): boolean => {
         if (!userProfile) return false
         return (userProfile.questBitmap & (1 << (questId - 1))) !== 0
     }, [userProfile])
@@ -234,18 +233,18 @@ export function StacksProvider({ children }: { children: ReactNode }) {
 
     // Fetch data when connected
     useEffect(() => {
-        if (isConnected && address) {
+        if (connected && address) {
             refreshData()
         }
-    }, [isConnected, address, refreshData])
+    }, [connected, address, refreshData])
 
     return (
         <StacksContext.Provider value={{
-            isConnected,
+            isConnected: connected,
             address,
             isMainnet,
-            connect,
-            disconnect,
+            connect: handleConnect,
+            disconnect: handleDisconnect,
             contractInfo: {
                 ...contractInfo,
                 network: isMainnet ? 'mainnet' : 'testnet',
@@ -261,7 +260,7 @@ export function StacksProvider({ children }: { children: ReactNode }) {
             predictPulse,
             claimDailyCombo,
             refreshData,
-            isQuestCompleted,
+            isQuestCompleted: isQuestCompletedFn,
         }}>
             {children}
         </StacksContext.Provider>
