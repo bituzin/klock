@@ -1,71 +1,230 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import EngagementCard from './EngagementCard'
 import { motion } from 'framer-motion'
 import {
     Zap, Globe, CloudSun, UserCheck, Clock,
-    MessageSquare, Flame, Trophy, TrendingUp, Gift
+    MessageSquare, Flame, Trophy, TrendingUp, Gift, AlertCircle, Loader2
 } from 'lucide-react'
+import { useUnifiedContract } from '@/hooks/useUnifiedContract'
 
-// Mock Data for the 10 functions
+// Quest definitions matching contract QUEST_IDS
 const INTERACTIONS = [
-    { id: '1', name: 'Daily Check-In', desc: 'Secure your streak & get Pulse Points.', icon: Zap, points: 50 },
-    { id: '2', name: 'Relay Signal', desc: 'Pass the torch to another timezone.', icon: Globe, points: 100 },
-    { id: '3', name: 'Update Atmosphere', desc: 'Sync local weather to chain.', icon: CloudSun, points: 30 },
-    { id: '4', name: 'Nudge Friend', desc: 'Ping a friend to save their streak.', icon: UserCheck, points: 40 },
-    { id: '5', name: 'Mint Hour Badge', desc: 'Collect unique hour stamps.', icon: Clock, points: 60 },
-    { id: '6', name: 'Commit Message', desc: 'Etch your mood on the ticker.', icon: MessageSquare, points: 20 },
-    { id: '7', name: 'Stake for Streak', desc: 'High risk, high reward.', icon: Flame, points: 200, risk: true },
-    { id: '8', name: 'Claim Milestone', desc: 'Evolve your profile level.', icon: Trophy, points: 500 },
-    { id: '9', name: 'Predict Pulse', desc: "Vote on tomorrow's activity.", icon: TrendingUp, points: 80 },
-    { id: '10', name: 'Open Capsule', desc: 'Reveal long-term rewards.', icon: Gift, points: 1000 },
+    { id: 1, name: 'Daily Check-In', desc: 'Secure your streak & get Pulse Points.', icon: Zap, points: 50, action: 'dailyCheckin' },
+    { id: 2, name: 'Relay Signal', desc: 'Pass the torch to another timezone.', icon: Globe, points: 100, action: 'relaySignal' },
+    { id: 3, name: 'Update Atmosphere', desc: 'Sync local weather to chain.', icon: CloudSun, points: 30, action: 'updateAtmosphere' },
+    { id: 4, name: 'Nudge Friend', desc: 'Ping a friend to save their streak.', icon: UserCheck, points: 40, action: 'nudgeFriend' },
+    { id: 5, name: 'Mint Hour Badge', desc: 'Collect unique hour stamps.', icon: Clock, points: 60, action: 'mintHourBadge', disabled: true },
+    { id: 6, name: 'Commit Message', desc: 'Etch your mood on the ticker.', icon: MessageSquare, points: 20, action: 'commitMessage' },
+    { id: 7, name: 'Stake for Streak', desc: 'High risk, high reward.', icon: Flame, points: 200, risk: true, action: 'stakeStreak', disabled: true },
+    { id: 8, name: 'Claim Milestone', desc: 'Evolve your profile level.', icon: Trophy, points: 500, action: 'claimMilestone', disabled: true },
+    { id: 9, name: 'Predict Pulse', desc: "Vote on tomorrow's activity.", icon: TrendingUp, points: 80, action: 'predictPulse' },
+    { id: 10, name: 'Open Capsule', desc: 'Reveal long-term rewards.', icon: Gift, points: 1000, action: 'openCapsule', disabled: true },
 ]
 
+// Combo quest IDs for "Daily Triple"
+const COMBO_IDS = [1, 3, 6] // Daily Check-In, Update Atmosphere, Commit Message
+
 export default function QuestDashboard() {
-    const [completed, setCompleted] = useState<string[]>([])
-    const [timestamps, setTimestamps] = useState<Record<string, number>>({})
+    const {
+        isConnected,
+        activeContract,
+        chainType,
+        contractInfo,
+        userProfile,
+        isLoading,
+        error,
+        dailyCheckin,
+        relaySignal,
+        updateAtmosphere,
+        nudgeFriend,
+        commitMessage,
+        predictPulse,
+        claimDailyCombo,
+        isQuestCompleted,
+        checkComboAvailable,
+        refreshData,
+    } = useUnifiedContract()
+
+    const [pendingQuest, setPendingQuest] = useState<number | null>(null)
+    const [localError, setLocalError] = useState<string | null>(null)
     const [comboActive, setComboActive] = useState(false)
+    const [showMessageInput, setShowMessageInput] = useState(false)
+    const [message, setMessage] = useState('')
+    const [showFriendInput, setShowFriendInput] = useState(false)
+    const [friendAddress, setFriendAddress] = useState('')
 
-    // Combo Conditions: IDs 1, 3, 6 within 5 minutes
-    const COMBO_IDS = ['1', '3', '6']
-    const COMBO_WINDOW_MS = 5 * 60 * 1000
-
-    const checkCombo = (currentTimestamps: Record<string, number>) => {
-        const hasAll = COMBO_IDS.every(id => currentTimestamps[id])
-        if (!hasAll) return
-
-        const time1 = currentTimestamps['1']
-        const time3 = currentTimestamps['3']
-        const time6 = currentTimestamps['6']
-
-        const minTime = Math.min(time1, time3, time6)
-        const maxTime = Math.max(time1, time3, time6)
-
-        if (maxTime - minTime <= COMBO_WINDOW_MS) {
-            setComboActive(true)
+    // Check combo availability
+    useEffect(() => {
+        const checkCombo = async () => {
+            const available = await checkComboAvailable()
+            setComboActive(available)
         }
-    }
+        if (isConnected) {
+            checkCombo()
+        }
+    }, [isConnected, checkComboAvailable])
 
-    // Mock function handler
-    const handleInteraction = (id: string) => {
-        if (completed.includes(id)) return
+    // Calculate completed quests
+    const completedQuests = INTERACTIONS.filter(q => isQuestCompleted(q.id)).map(q => q.id)
+    const progress = (completedQuests.length / INTERACTIONS.length) * 100
 
-        console.log(`Triggering function ${id}...`)
+    // Handle quest interaction
+    const handleInteraction = useCallback(async (questId: number, action: string) => {
+        if (!isConnected || activeContract === 'none') {
+            setLocalError('Please connect to a supported network (Base or Stacks)')
+            return
+        }
 
-        // Optimistic update
-        const now = Date.now()
-        const newTimestamps = { ...timestamps, [id]: now }
-        setTimestamps(newTimestamps)
-        setCompleted(prev => [...prev, id])
+        if (isQuestCompleted(questId)) {
+            setLocalError('Quest already completed today')
+            return
+        }
 
-        checkCombo(newTimestamps)
-    }
+        // Handle special input cases
+        if (action === 'commitMessage' && !showMessageInput) {
+            setShowMessageInput(true)
+            return
+        }
+        if (action === 'nudgeFriend' && !showFriendInput) {
+            setShowFriendInput(true)
+            return
+        }
 
-    const progress = (completed.length / INTERACTIONS.length) * 100
+        setPendingQuest(questId)
+        setLocalError(null)
+
+        try {
+            let result: { success: boolean; error?: string }
+
+            switch (action) {
+                case 'dailyCheckin':
+                    result = await dailyCheckin()
+                    break
+                case 'relaySignal':
+                    result = await relaySignal()
+                    break
+                case 'updateAtmosphere':
+                    // Use a random weather code 1-10
+                    const weatherCode = Math.floor(Math.random() * 10) + 1
+                    result = await updateAtmosphere(weatherCode)
+                    break
+                case 'nudgeFriend':
+                    if (!friendAddress) {
+                        setLocalError('Please enter a friend address')
+                        setPendingQuest(null)
+                        return
+                    }
+                    result = await nudgeFriend(friendAddress)
+                    setShowFriendInput(false)
+                    setFriendAddress('')
+                    break
+                case 'commitMessage':
+                    if (!message) {
+                        setLocalError('Please enter a message')
+                        setPendingQuest(null)
+                        return
+                    }
+                    result = await commitMessage(message)
+                    setShowMessageInput(false)
+                    setMessage('')
+                    break
+                case 'predictPulse':
+                    // Predict a random level 1-5
+                    const level = Math.floor(Math.random() * 5) + 1
+                    result = await predictPulse(level)
+                    break
+                default:
+                    result = { success: false, error: 'Quest not yet implemented' }
+            }
+
+            if (!result.success && result.error) {
+                setLocalError(result.error)
+            }
+        } catch (err) {
+            setLocalError(err instanceof Error ? err.message : 'Transaction failed')
+        } finally {
+            setPendingQuest(null)
+        }
+    }, [isConnected, activeContract, isQuestCompleted, dailyCheckin, relaySignal,
+        updateAtmosphere, nudgeFriend, commitMessage, predictPulse,
+        showMessageInput, message, showFriendInput, friendAddress])
+
+    // Handle claiming combo
+    const handleClaimCombo = useCallback(async () => {
+        if (!comboActive) return
+
+        setPendingQuest(-1) // Special ID for combo
+        try {
+            const result = await claimDailyCombo()
+            if (!result.success && result.error) {
+                setLocalError(result.error)
+            } else {
+                setComboActive(false)
+            }
+        } catch (err) {
+            setLocalError(err instanceof Error ? err.message : 'Failed to claim combo')
+        } finally {
+            setPendingQuest(null)
+        }
+    }, [comboActive, claimDailyCombo])
 
     return (
         <div className="w-full">
+            {/* Network Info Banner */}
+            {isConnected && (
+                <div className="mb-6 bg-gray-50 border border-gray-200 rounded-xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${activeContract === 'none' ? 'bg-red-500' : 'bg-green-500'
+                            }`} />
+                        <div>
+                            <span className="text-sm font-medium text-gray-700">
+                                {activeContract === 'base' && 'Connected to Base'}
+                                {activeContract === 'stacks' && 'Connected to Stacks'}
+                                {activeContract === 'none' && 'Unsupported Network'}
+                            </span>
+                            {contractInfo.contractAddress && (
+                                <p className="text-xs text-gray-500">
+                                    Contract: {contractInfo.contractAddress.slice(0, 10)}...
+                                    {contractInfo.network === 'testnet' &&
+                                        <span className="ml-2 text-orange-600">(Testnet)</span>}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <button
+                        onClick={refreshData}
+                        disabled={isLoading}
+                        className="text-sm text-[#FF6B00] hover:underline disabled:opacity-50"
+                    >
+                        {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Refresh'}
+                    </button>
+                </div>
+            )}
+
+            {/* User Stats */}
+            {userProfile && (
+                <div className="mb-8 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                        <p className="text-xs text-gray-400 uppercase font-bold">Total Points</p>
+                        <p className="text-2xl font-bold text-[#FF6B00]">{userProfile.totalPoints.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                        <p className="text-xs text-gray-400 uppercase font-bold">Current Streak</p>
+                        <p className="text-2xl font-bold text-gray-900">{userProfile.currentStreak} days</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                        <p className="text-xs text-gray-400 uppercase font-bold">Longest Streak</p>
+                        <p className="text-2xl font-bold text-gray-900">{userProfile.longestStreak} days</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                        <p className="text-xs text-gray-400 uppercase font-bold">Level</p>
+                        <p className="text-2xl font-bold text-purple-600">{userProfile.level}</p>
+                    </div>
+                </div>
+            )}
+
             {/* Header Stats */}
             <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
                 <div>
@@ -75,7 +234,7 @@ export default function QuestDashboard() {
                 <div className="flex items-center gap-4 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                     <div className="flex flex-col text-right">
                         <span className="text-xs text-gray-400 uppercase font-bold tracking-wider">Progress</span>
-                        <span className="text-xl font-bold text-[#FF6B00]">{completed.length} / 10</span>
+                        <span className="text-xl font-bold text-[#FF6B00]">{completedQuests.length} / 10</span>
                     </div>
                     <div className="w-16 h-16 relative">
                         <svg className="w-full h-full transform -rotate-90">
@@ -92,6 +251,24 @@ export default function QuestDashboard() {
                 </div>
             </div>
 
+            {/* Error Display */}
+            {(error || localError) && (
+                <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6 bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center gap-3"
+                >
+                    <AlertCircle className="w-5 h-5" />
+                    <p>{error || localError}</p>
+                    <button
+                        onClick={() => setLocalError(null)}
+                        className="ml-auto text-sm underline"
+                    >
+                        Dismiss
+                    </button>
+                </motion.div>
+            )}
+
             {/* Combo Banner */}
             {comboActive && (
                 <motion.div
@@ -100,15 +277,83 @@ export default function QuestDashboard() {
                     className="mb-8 bg-gradient-to-r from-orange-500 to-red-500 text-white p-6 rounded-2xl shadow-lg flex items-center justify-between"
                 >
                     <div>
-                        <h3 className="text-2xl font-bold">🔥 DAILY TRIPLE ACTIVATED!</h3>
-                        <p className="text-orange-100">You completed the ritual loop in under 5 minutes. 2x Multiplier applied.</p>
+                        <h3 className="text-2xl font-bold">DAILY TRIPLE AVAILABLE!</h3>
+                        <p className="text-orange-100">Complete Check-In, Atmosphere & Message for +200 bonus points.</p>
                     </div>
-                    <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                    <button
+                        onClick={handleClaimCombo}
+                        disabled={pendingQuest === -1}
+                        className="bg-white text-orange-600 px-6 py-3 rounded-xl font-bold hover:bg-orange-50 disabled:opacity-50"
                     >
-                        <Flame size={48} className="text-yellow-300" />
-                    </motion.div>
+                        {pendingQuest === -1 ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Claim Bonus'}
+                    </button>
+                </motion.div>
+            )}
+
+            {/* Message Input Modal */}
+            {showMessageInput && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mb-6 bg-white border border-gray-200 p-6 rounded-2xl shadow-lg"
+                >
+                    <h3 className="font-bold text-gray-900 mb-3">Commit Your Message</h3>
+                    <input
+                        type="text"
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        placeholder="What's on your mind? (max 280 chars)"
+                        maxLength={280}
+                        className="w-full p-3 border border-gray-200 rounded-xl mb-4"
+                    />
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => handleInteraction(6, 'commitMessage')}
+                            disabled={!message || pendingQuest === 6}
+                            className="bg-[#FF6B00] text-white px-6 py-2 rounded-xl font-medium disabled:opacity-50"
+                        >
+                            {pendingQuest === 6 ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Submit'}
+                        </button>
+                        <button
+                            onClick={() => { setShowMessageInput(false); setMessage('') }}
+                            className="text-gray-500 px-6 py-2"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Friend Address Input Modal */}
+            {showFriendInput && (
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mb-6 bg-white border border-gray-200 p-6 rounded-2xl shadow-lg"
+                >
+                    <h3 className="font-bold text-gray-900 mb-3">Nudge a Friend</h3>
+                    <input
+                        type="text"
+                        value={friendAddress}
+                        onChange={(e) => setFriendAddress(e.target.value)}
+                        placeholder={activeContract === 'stacks' ? 'SP... or ST...' : '0x...'}
+                        className="w-full p-3 border border-gray-200 rounded-xl mb-4 font-mono text-sm"
+                    />
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => handleInteraction(4, 'nudgeFriend')}
+                            disabled={!friendAddress || pendingQuest === 4}
+                            className="bg-[#FF6B00] text-white px-6 py-2 rounded-xl font-medium disabled:opacity-50"
+                        >
+                            {pendingQuest === 4 ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Nudge'}
+                        </button>
+                        <button
+                            onClick={() => { setShowFriendInput(false); setFriendAddress('') }}
+                            className="text-gray-500 px-6 py-2"
+                        >
+                            Cancel
+                        </button>
+                    </div>
                 </motion.div>
             )}
 
@@ -122,14 +367,16 @@ export default function QuestDashboard() {
                 {INTERACTIONS.map((quest) => (
                     <EngagementCard
                         key={quest.id}
-                        id={quest.id}
+                        id={quest.id.toString()}
                         title={quest.name}
                         description={quest.desc}
                         icon={quest.icon}
                         points={quest.points}
                         streakRisk={quest.risk}
-                        isCompleted={completed.includes(quest.id)}
-                        onClick={() => handleInteraction(quest.id)}
+                        isCompleted={isQuestCompleted(quest.id)}
+                        isLoading={pendingQuest === quest.id}
+                        isDisabled={quest.disabled || !isConnected || activeContract === 'none'}
+                        onClick={() => handleInteraction(quest.id, quest.action)}
                     />
                 ))}
             </motion.div>
