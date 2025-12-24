@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useCallback, useState, useEffect, ReactNode } from 'react'
 import { connect, request, isConnected, disconnect as stacksDisconnect, getLocalStorage } from '@stacks/connect'
-import { uintCV, stringAsciiCV, principalCV } from '@stacks/transactions'
+import { uintCV, stringAsciiCV, principalCV, cvToHex } from '@stacks/transactions'
 import { STACKS_CONTRACTS } from '@/config/contracts'
 
 // Types
@@ -35,10 +35,10 @@ async function fetchQuestStatuses(
                         body: JSON.stringify({
                             sender: address,
                             arguments: [
-                                // First arg: principal (user address)
-                                `0x0516${address.slice(2)}`, // Standard principal encoding
+                                // First arg: principal (user address) - properly encoded
+                                cvToHex(principalCV(address)),
                                 // Second arg: quest-id as uint128
-                                `0x0100000000000000000000000000000000${questId.toString(16).padStart(2, '0')}`
+                                cvToHex(uintCV(questId))
                             ],
                         }),
                     }
@@ -80,7 +80,7 @@ async function fetchQuestStatuses(
                     body: JSON.stringify({
                         sender: address,
                         arguments: [
-                            `0x0516${address.slice(2)}`
+                            cvToHex(principalCV(address))
                         ],
                     }),
                 }
