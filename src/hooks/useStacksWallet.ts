@@ -238,8 +238,52 @@ export function useStacksWallet() {
             if (response.ok) {
                 const data = await response.json()
                 if (data.okay && data.result) {
-                    console.log('[Stacks] User profile:', data.result)
-                    // TODO: Parse Clarity tuple response into StacksUserProfile
+                    console.log('[Stacks] User profile raw:', data.result)
+
+                    // Parse Clarity tuple response into StacksUserProfile
+                    // Clarity API returns hex-encoded values that need to be parsed
+                    try {
+                        const clarityValue = data.result
+
+                        // Helper to parse Clarity uint from hex
+                        const parseUint = (hexStr: string): number => {
+                            if (!hexStr || hexStr === '0x') return 0
+                            // Remove '0x' prefix and convert hex to decimal
+                            const cleaned = hexStr.startsWith('0x') ? hexStr.slice(2) : hexStr
+                            return parseInt(cleaned, 16)
+                        }
+
+                        // The response is a Clarity tuple (optional)
+                        // Format: (some { total-points: u123, current-streak: u5, ... })
+                        // or: none
+                        if (clarityValue.includes('none')) {
+                            console.log('[Stacks] User profile not found')
+                            setUserProfile(null)
+                        } else {
+                            // Parse the tuple fields from the Clarity response
+                            // The API returns a structured object with type information
+                            const tupleData = typeof clarityValue === 'string'
+                                ? JSON.parse(clarityValue)
+                                : clarityValue
+
+                            // Extract values based on Clarity tuple structure
+                            const profile: StacksUserProfile = {
+                                totalPoints: parseUint(tupleData['total-points']?.value || tupleData.totalPoints || '0x0'),
+                                currentStreak: parseUint(tupleData['current-streak']?.value || tupleData.currentStreak || '0x0'),
+                                longestStreak: parseUint(tupleData['longest-streak']?.value || tupleData.longestStreak || '0x0'),
+                                lastCheckinDay: parseUint(tupleData['last-checkin-block']?.value || tupleData.lastCheckinBlock || '0x0'),
+                                questBitmap: parseUint(tupleData['completed-quests']?.value || tupleData.questBitmap || '0x0'),
+                                level: parseUint(tupleData.level?.value || tupleData.level || '0x1'),
+                                totalCheckins: parseUint(tupleData['total-checkins']?.value || tupleData.totalCheckins || '0x0'),
+                            }
+
+                            console.log('[Stacks] Parsed user profile:', profile)
+                            setUserProfile(profile)
+                        }
+                    } catch (parseErr) {
+                        console.error('[Stacks] Error parsing Clarity response:', parseErr)
+                        console.error('[Stacks] Raw data:', data.result)
+                    }
                 }
             }
         } catch (err) {
