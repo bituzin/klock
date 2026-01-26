@@ -108,7 +108,7 @@ export default function LeaderboardPage() {
             {/* Footer */}
             <footer className="border-t border-gray-200 bg-white/50 mt-12">
                 <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 text-center text-sm text-gray-500">
-                    <p>© 2024 PULSE. Building the future of social rituals on Bitcoin L2s.</p>
+                    <p>© 2026 PULSE. Building the future of social rituals on Bitcoin L2s.</p>
                 </div>
             </footer>
         </main>
